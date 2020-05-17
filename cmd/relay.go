@@ -10,7 +10,7 @@ import (
 
 func main() {
 	port := flag.Int("port", 8080, "local http port")
-	timeout := flag.Int64("timeout", 3, "request timeout")
+	timeout := flag.Int64("timeout", 4, "request timeout")
 	endpoint := flag.String("endpoint", "", "remote wss endpoint to relay")
 	flag.Parse()
 

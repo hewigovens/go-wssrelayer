@@ -7,7 +7,6 @@ import (
 )
 
 type CacheItem struct {
-	Id         string
 	OriginalId string
 	Chan       chan []byte
 }

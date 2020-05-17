@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -112,11 +111,10 @@ func (r *WSRelayer) relayHandler(w http.ResponseWriter, req *http.Request) {
 	id := genUniqueId(req)
 	ch := make(chan []byte)
 	item := CacheItem{
-		Id:         id,
 		OriginalId: originalId,
 		Chan:       ch,
 	}
-	requestCache.Set(id, item, time.Now().Add(r.RequestTimeout))
+	requestCache.Set(id, item, time.Now().Add(r.RequestTimeout*time.Second))
 	log.Printf("==> relay: %s", value.String())
 	value.Set("id", fastjson.MustParse(id))
 
@@ -185,8 +183,8 @@ func extractIP(r *http.Request) string {
 }
 
 func extractId(value *fastjson.Value) string {
-	if id := value.GetInt64("id"); id != 0 {
-		return strconv.FormatInt(id, 10)
+	if id := value.GetUint64("id"); id != 0 {
+		return fmt.Sprintf("%d", id)
 	}
 	return string(value.GetStringBytes("id"))
 }
