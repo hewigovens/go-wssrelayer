@@ -2,6 +2,7 @@ package wsrelayer
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cespare/xxhash"
 	"github.com/gorilla/websocket"
 	"github.com/valyala/fastjson"
 )
@@ -100,22 +102,14 @@ func (r *WSRelayer) relayHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	value, err := parseJSONRequest(req)
-	if err != nil {
+	value, originalId, err := parseJSONRequest(req)
+	if err != nil || originalId == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte("Invalid json"))
+		_, _ = io.WriteString(w, "Invalid jsonrpc request")
 		return
 	}
 
-	originalId := extractId(value)
-	if originalId == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte("Missing jsonrpc id"))
-		return
-	}
-
-	ip := extractIP(req)
-	id := fmt.Sprintf("%d", time.Now().UnixNano())
+	id := genUniqueId(req)
 	ch := make(chan []byte)
 	item := CacheItem{
 		Id:         id,
@@ -123,11 +117,14 @@ func (r *WSRelayer) relayHandler(w http.ResponseWriter, req *http.Request) {
 		Chan:       ch,
 	}
 	requestCache.Set(id, item, time.Now().Add(r.RequestTimeout))
-	log.Printf("==> relay: %s from %s", value.String(), ip)
+	log.Printf("==> relay: %s", value.String())
 	value.Set("id", fastjson.MustParse(id))
+
 	err = r.conn.WriteMessage(websocket.TextMessage, []byte(value.String()))
 	if err != nil {
-		log.Println(err.Error())
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, err.Error())
+		return
 	}
 
 	select {
@@ -135,10 +132,10 @@ func (r *WSRelayer) relayHandler(w http.ResponseWriter, req *http.Request) {
 		log.Println("<== wait response timeout")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		close(ch)
-	case result := <-ch:
+	case resp := <-ch:
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(result)
+		_, _ = w.Write(resp)
 	}
 }
 
@@ -150,8 +147,7 @@ func (r *WSRelayer) process() error {
 	}
 
 	log.Printf("<== recv: %s\n", message)
-	var p fastjson.Parser
-	value, err := p.ParseBytes(message)
+	value, err := parseJSON(message)
 	if err != nil {
 		log.Println("<== parse json error:", err)
 		return err
@@ -160,17 +156,19 @@ func (r *WSRelayer) process() error {
 	id := extractId(value)
 	if item := requestCache.Get(id); item != nil {
 		value.Set("id", fastjson.MustParse(item.OriginalId))
-		// item.Chan <- []byte(value.String())
+		item.Chan <- []byte(value.String())
 	}
 	return nil
 }
 
-func parseJSONRequest(req *http.Request) (*fastjson.Value, error) {
+func parseJSONRequest(req *http.Request) (*fastjson.Value, string, error) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return parseJSON(body)
+	value, err := parseJSON(body)
+	originalId := extractId(value)
+	return value, originalId, err
 }
 
 func parseJSON(data []byte) (*fastjson.Value, error) {
@@ -191,4 +189,10 @@ func extractId(value *fastjson.Value) string {
 		return strconv.FormatInt(id, 10)
 	}
 	return string(value.GetStringBytes("id"))
+}
+
+func genUniqueId(r *http.Request) string {
+	ip := extractIP(r)
+	id := fmt.Sprintf("%d-%s", time.Now().UnixNano(), ip)
+	return fmt.Sprintf("%d", xxhash.Sum64String(id))
 }
