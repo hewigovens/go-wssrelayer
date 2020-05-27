@@ -1,4 +1,4 @@
-## ws-relayer
+## go-wssrelayer
 
 A utility tool to relay json rpc request (from http post) to remote wss endpoint.
 

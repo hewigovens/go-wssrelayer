@@ -1,4 +1,4 @@
-module github.com/hewigovens/wsrelayer
+module github.com/hewigovens/go-wssrelayer
 
 go 1.14
 

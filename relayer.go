@@ -1,4 +1,4 @@
-package wsrelayer
+package wssrelayer
 
 import (
 	"fmt"
@@ -20,13 +20,13 @@ var (
 	requestCache = NewRequestCache()
 )
 
-type WSRelayer struct {
+type WSSRelayer struct {
 	Port           int
 	RequestTimeout time.Duration
 	conn           *websocket.Conn
 }
 
-func (r *WSRelayer) ConnectAndServe(endpoint string) error {
+func (r *WSSRelayer) ConnectAndServe(endpoint string) error {
 	// connect to wss endpoint
 	c, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
 	if err != nil {
@@ -76,7 +76,7 @@ func (r *WSRelayer) ConnectAndServe(endpoint string) error {
 	}
 }
 
-func (r *WSRelayer) Stop() {
+func (r *WSSRelayer) Stop() {
 	// Cleanly close the connection by sending a close message and then
 	// waiting (with timeout) for the server to close the connection.
 	err := r.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
@@ -87,7 +87,7 @@ func (r *WSRelayer) Stop() {
 	time.Sleep(time.Second)
 }
 
-func (r *WSRelayer) serveHTTP() {
+func (r *WSSRelayer) serveHTTP() {
 	http.HandleFunc("/", r.relayHandler)
 	log.Printf("==> Relaying at 0.0.0.0:%d\n", r.Port)
 	if http.ListenAndServe(fmt.Sprintf(":%d", r.Port), nil) != nil {
@@ -95,8 +95,14 @@ func (r *WSRelayer) serveHTTP() {
 	}
 }
 
-func (r *WSRelayer) relayHandler(w http.ResponseWriter, req *http.Request) {
-	if req.URL.Path != "/" || req.Method != "POST" {
+func (r *WSSRelayer) relayHandler(w http.ResponseWriter, req *http.Request) {
+	if req.Method == "GET" {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "Try posting jsonrpc request to /relay such as: `curl localhost:8080/relay -XPOST -d '{}'`")
+		return
+	}
+
+	if req.URL.Path != "/relay" {
 		http.NotFound(w, req)
 		return
 	}
@@ -137,7 +143,7 @@ func (r *WSRelayer) relayHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (r *WSRelayer) process() error {
+func (r *WSSRelayer) process() error {
 	_, message, err := r.conn.ReadMessage()
 	if err != nil {
 		log.Println("<== read:", err)

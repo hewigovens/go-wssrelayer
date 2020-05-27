@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hewigovens/wsrelayer"
+	wssrelayer "github.com/hewigovens/go-wssrelayer"
 )
 
 func main() {
@@ -19,7 +19,7 @@ func main() {
 		fmt.Println("Usage: ./relay -port=8080 -endpoint=wss://")
 		return
 	}
-	relayer := wsrelayer.WSRelayer{
+	relayer := wssrelayer.WSSRelayer{
 		Port:           *port,
 		RequestTimeout: time.Duration(*timeout),
 	}

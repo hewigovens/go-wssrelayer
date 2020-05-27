@@ -1,4 +1,4 @@
-package wsrelayer
+package wssrelayer
 
 import (
 	"time"
